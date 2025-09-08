@@ -17,6 +17,8 @@ processors:
   - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/metricstransformprocessor v0.128.0
   - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor v0.128.0
   - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/transformprocessor v0.128.0
+  - gomod: github.com/newrelic/nrdot-collector-releases/processor/resourcethresholdprocessor v0.0.0
+    path: ./processor/resourceThresholdProcessor
 exporters:
   - gomod: go.opentelemetry.io/collector/exporter/debugexporter v0.128.0
   - gomod: go.opentelemetry.io/collector/exporter/otlpexporter v0.128.0
@@ -33,5 +35,7 @@ providers:
   - gomod: go.opentelemetry.io/collector/confmap/provider/yamlprovider v1.34.0
 
 # When adding a replace, add a comment before it to document why it's needed and when it can be removed
-# replaces:
+replaces:
+  # Local development of custom resource threshold processor
+  - github.com/newrelic/nrdot-collector-releases/processor/resourcethresholdprocessor => ./processor/resourceThresholdProcessor
 ### Transitive deps determined via `go mod graph | grep $dep@$dep_replace_version`

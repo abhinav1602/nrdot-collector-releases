@@ -9,49 +9,40 @@ receivers:
 
   hostmetrics:
     # Default collection interval is 60s. Lower if you need finer granularity.
-    collection_interval: 60s
+    collection_interval: 90s
     scrapers:
-      cpu:
-        metrics:
-          system.cpu.time:
-            enabled: false
-          system.cpu.utilization:
-            enabled: true
-      load:
-      memory:
-        metrics:
-          system.memory.utilization:
-            enabled: true
-      paging:
-        metrics:
-          system.paging.utilization:
-            enabled: false
-          system.paging.faults:
-            enabled: false
-      filesystem:
-        metrics:
-          system.filesystem.utilization:
-            enabled: true
-      disk:
-        metrics:
-          system.disk.merged:
-            enabled: false
-          system.disk.pending_operations:
-            enabled: false
-          system.disk.weighted_io_time:
-            enabled: false
-      network:
-        metrics:
-          system.network.connections:
-            enabled: false
       # Uncomment to enable process metrics, which can be noisy but valuable.
-      # processes:
-      # process:
-      #  metrics:
-      #    process.cpu.utilization:
-      #      enabled: true
-      #    process.cpu.time:
-      #      enabled: false
+      processes:
+      process:
+        metrics:
+          process.cpu.time:
+            enabled: true
+          process.cpu.utilization:
+            enabled: true
+          process.memory.usage: # Physical memory
+            enabled: true
+          process.memory.virtual: # Virtual memory
+            enabled: true
+          process.disk.io: # Bytes read/written
+            enabled: true
+          process.disk.operations: # Number of read/write operations
+            enabled: true
+          process.threads: # Number of threads (replaces process.thread.count)
+            enabled: true
+          process.open_file_descriptors: # Number of open file descriptors (replaces process.open_file_descriptor.count)
+            enabled: true
+          process.paging.faults:
+            enabled: true
+          process.context_switches:
+            enabled: true
+          process.uptime:
+            enabled: true
+          # Platform-specific metrics (enable if on the respective OS, might be ignored or cause errors on others)
+          process.handles: # Windows-specific: Number of open handles
+            enabled: false
+          process.signals_pending: # Linux-specific: Number of pending signals for the process
+            enabled: true
+
 
   filelog:
     include:
@@ -66,6 +57,12 @@ receivers:
 
 processors:
   # group system.cpu metrics by cpu
+  resource_threshold:
+    storage_path: ./data/resourceThresholdProcessor.db
+    retention_minutes: 60
+    metric_thresholds:
+      process.cpu.utilization: 5
+      process.memory.utilization: 10
   metricstransform:
     transforms:
       - include: system.cpu.utilization
@@ -204,6 +201,7 @@ service:
       receivers: [hostmetrics]
       processors:
         - memory_limiter
+        - resource_threshold
         - metricstransform
         - filter/exclude_cpu_utilization
         - filter/exclude_memory_utilization
@@ -223,19 +221,19 @@ service:
       exporters: [otlphttp]
     logs/host:
       receivers: [filelog]
-      processors: [memory_limiter, transform, resourcedetection, resourcedetection/cloud, resourcedetection/env, batch]
+      processors: [transform, resourcedetection, resourcedetection/cloud, resourcedetection/env, batch]
       exporters: [otlphttp]
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, transform, resourcedetection, resourcedetection/cloud, resourcedetection/env, batch]
+      processors: [transform, resourcedetection, resourcedetection/cloud, resourcedetection/env, batch]
       exporters: [otlphttp]
     metrics:
       receivers: [otlp]
-      processors: [memory_limiter, transform, resourcedetection, resourcedetection/cloud, resourcedetection/env, batch]
+      processors: [transform, resourcedetection, resourcedetection/cloud, resourcedetection/env, batch]
       exporters: [otlphttp]
     logs:
       receivers: [otlp]
-      processors: [memory_limiter, transform, resourcedetection, resourcedetection/cloud, resourcedetection/env, batch]
+      processors: [transform, resourcedetection, resourcedetection/cloud, resourcedetection/env, batch]
       exporters: [otlphttp]
 
   extensions: [health_check]
