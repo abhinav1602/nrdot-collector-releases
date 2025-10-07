@@ -9,40 +9,8 @@ receivers:
 
   hostmetrics:
     # Default collection interval is 60s. Lower if you need finer granularity.
-    collection_interval: 60s
+    collection_interval: 1s
     scrapers:
-      # Disabled process metrics to avoid permission errors with kernel threads
-      processes:
-      process:
-        metrics:
-          process.cpu.time:
-            enabled: true
-          process.cpu.utilization:
-            enabled: true
-          process.memory.usage: # Physical memory
-            enabled: true
-          process.memory.virtual: # Virtual memory
-            enabled: true
-          process.disk.io: # Bytes read/written
-            enabled: true
-          process.disk.operations: # Number of read/write operations
-            enabled: true
-          process.threads: # Number of threads (replaces process.thread.count)
-            enabled: true
-          process.open_file_descriptors: # Number of open file descriptors (replaces process.open_file_descriptor.count)
-            enabled: true
-          process.paging.faults:
-            enabled: true
-          process.context_switches:
-            enabled: true
-          process.uptime:
-            enabled: true
-          # Platform-specific metrics (enable if on the respective OS, might be ignored or cause errors on others)
-          process.handles: # Windows-specific: Number of open handles
-            enabled: false
-          process.signals_pending: # Linux-specific: Number of pending signals for the process
-            enabled: true
-
       cpu:
         metrics:
           system.cpu.time:
@@ -51,13 +19,18 @@ receivers:
             enabled: true
       load:
         metrics:
-          system.cpu.load_average.15m:
-            enabled: true
           system.cpu.load_average.1m:
             enabled: true
           system.cpu.load_average.5m:
             enabled: true
-
+          system.cpu.load_average.15m:
+            enabled: true
+      memory:
+        metrics:
+          system.memory.usage:
+            enabled: true
+          system.memory.utilization:
+            enabled: true
       paging:
         metrics:
           system.paging.faults:
@@ -68,16 +41,23 @@ receivers:
             enabled: true
           system.paging.utilization:
             enabled: true
-
       filesystem:
         metrics:
-          system.filesystem.inodes.usage:
-            enabled: true
           system.filesystem.usage:
             enabled: true
           system.filesystem.utilization:
             enabled: true
-
+          system.filesystem.inodes.usage:
+            enabled: true
+        # Exclude standard virtual filesystems
+        exclude_mount_points:
+          match_type: regexp
+          mount_points:
+            - '^/(sys|proc|dev)($|/)'
+        # Include all filesystem types
+        exclude_fs_types:
+          match_type: strict
+          fs_types: []  # Empty list means include all
       disk:
         metrics:
           system.disk.io:
@@ -86,15 +66,14 @@ receivers:
             enabled: true
           system.disk.merged:
             enabled: true
-          system.disk.operation_time:
-            enabled: true
           system.disk.operations:
+            enabled: true
+          system.disk.operation_time:
             enabled: true
           system.disk.pending_operations:
             enabled: true
           system.disk.weighted_io_time:
             enabled: true
-
       network:
         metrics:
           system.network.connections:
@@ -107,13 +86,60 @@ receivers:
             enabled: true
           system.network.packets:
             enabled: true
-      memory:
+      processes:
         metrics:
-          system.memory.usage:
+          system.processes.count:
             enabled: true
-          system.memory.utilization:
+          system.processes.created:
             enabled: true
-
+      process:
+        metrics:
+          process.cpu.time:
+            enabled: true
+          process.cpu.utilization:
+            enabled: true
+          process.memory.usage:
+            enabled: true
+          process.memory.virtual:
+            enabled: true
+          process.memory.utilization:
+            enabled: true
+          process.disk.io:
+            enabled: true
+          process.disk.operations:
+            enabled: true
+          process.threads:
+            enabled: true
+          process.open_file_descriptors:
+            enabled: true
+          process.paging.faults:
+            enabled: true
+          process.context_switches:
+            enabled: true
+          process.uptime:
+            enabled: true
+          process.handles:
+            enabled: true
+          process.signals_pending:
+            enabled: true
+        # Capture all the process resource attributes mentioned in the schema
+        resource_attributes:
+          process.pid:
+            enabled: true
+          process.parent_pid:
+            enabled: true
+          process.executable.name:
+            enabled: true
+          process.executable.path:
+            enabled: true
+          process.command:
+            enabled: true
+          process.command_line:
+            enabled: true
+          process.owner:
+            enabled: true
+          process.cgroup:
+            enabled: false  # Set to false as per schema
 
   filelog:
     include:
@@ -127,55 +153,7 @@ receivers:
       - /var/log/yum.log
 
 processors:
-  adaptivetelemetryprocessor:
-    # Storage configuration for persistence
-    storage_path: "./adaptiveprocess.db"
-    retention_minutes: 30
-
-    # Metric thresholds for actual hostmetrics receiver metrics
-    metric_thresholds:
-      # CPU metrics from hostmetrics receiver
-      system.cpu.utilization: 0.70           # 70% CPU utilization (0-1 scale)
-
-      # Memory metrics from hostmetrics receiver
-      system.memory.utilization: 0.80        # 80% memory utilization (0-1 scale)
-      system.memory.usage: 8589934592        # 8GB memory usage in bytes
-
-      # Disk metrics from hostmetrics receiver
-      system.disk.io.read_bytes: 104857600   # 100MB disk read
-      system.disk.io.write_bytes: 104857600  # 100MB disk write
-      system.filesystem.utilization: 0.85    # 85% disk utilization (0-1 scale)
-
-      # Network metrics from hostmetrics receiver
-      system.network.io.receive_bytes: 104857600  # 100MB network receive
-      system.network.io.transmit_bytes: 104857600 # 100MB network transmit
-
-    # Dynamic threshold configuration
-    enable_dynamic_thresholds: true
-    dynamic_smoothing_factor: 0.2
-    min_thresholds:
-      system.cpu.utilization: 0.30           # Minimum 30% CPU
-      system.memory.utilization: 0.50        # Minimum 50% memory
-      system.filesystem.utilization: 0.60    # Minimum 60% disk
-    max_thresholds:
-      system.cpu.utilization: 0.95           # Maximum 95% CPU
-      system.memory.utilization: 0.95        # Maximum 95% memory
-      system.filesystem.utilization: 0.95    # Maximum 95% disk
-
-    # Multi-metric composite scoring
-    enable_multi_metric: true
-    composite_threshold: 0.8                 # Lower threshold for testing
-    weights:
-      system.cpu.utilization: 0.3
-      system.memory.utilization: 0.3
-      system.filesystem.utilization: 0.4
-
-    # Anomaly detection configuration
-    enable_anomaly_detection: true
-    anomaly_history_size: 15
-    anomaly_change_threshold: 50.0
-
-
+  # group system.cpu metrics by cpu
   metricstransform:
     transforms:
       - include: system.cpu.utilization
@@ -190,26 +168,74 @@ processors:
           - action: aggregate_labels
             label_set: [ direction ]
             aggregation_type: sum
-  # remove system.cpu metrics for states
+            
+  # Removed backup static processor - using only the main processor with dynamic thresholds
+
+  # Adaptive process filter processor configuration
+  adaptivetelemetryprocessor:
+    # Enable all filter stage features
+    enable_dynamic_thresholds: true
+    enable_multi_metric: true
+    enable_anomaly_detection: true
+    
+    # Thresholds configured to catch the conditions generated by the Python script
+    metric_thresholds:
+      process.cpu.utilization: 15.0
+      system.cpu.utilization: 8.0
+      process.memory.utilization: 30.0
+      system.memory.utilization: 30.0
+      system.filesystem.utilization: 30.0
+      system.disk.io: 30.0
+      system.network.io: 30.0
+      system.paging.operations: 80.0
+      system.uptime: 0.0
+      process.uptime: 0.0
+
+    enable_storage: true
+    storage_path: "/tmp/adaptivetelemetry-test.db"
+    retention_minutes: 1  # 60 seconds for quick retention testing
+    
+    dynamic_smoothing_factor: 0.3
+    min_thresholds:
+      process.memory.utilization: 5.0
+      system.memory.utilization: 5.0
+    max_thresholds:
+      process.memory.utilization: 60.0
+      system.memory.utilization: 60.0
+
+    # Composite score settings for Multi-Metric stage
+    composite_threshold: 0.2  
+    weights:
+      system.filesystem.utilization: 0.4
+      system.disk.io: 0.4
+      system.network.io: 0.4
+      system.cpu.utilization: 0.6
+      system.memory.utilization: 0.6
+      process.cpu.utilization: 0.7
+      process.memory.utilization: 0.6
+
+    # Anomaly settings to catch the 1100% change in the test script
+    anomaly_history_size: 3             
+    anomaly_change_threshold: 20.0
+    
+    # Debug settings - critical for visibility in logs
+    debug_show_all_filter_stages: true
+  
+  # We're keeping all metrics, but still excluding some specific combinations 
+  # to avoid noisy or less useful data points
   filter/exclude_cpu_utilization:
     metrics:
       datapoint:
         - 'metric.name == "system.cpu.utilization" and attributes["state"] == "interrupt"'
-        - 'metric.name == "system.cpu.utilization" and attributes["state"] == "nice"'
         - 'metric.name == "system.cpu.utilization" and attributes["state"] == "softirq"'
   filter/exclude_memory_utilization:
     metrics:
       datapoint:
         - 'metric.name == "system.memory.utilization" and attributes["state"] == "slab_unreclaimable"'
-        - 'metric.name == "system.memory.utilization" and attributes["state"] == "inactive"'
-        - 'metric.name == "system.memory.utilization" and attributes["state"] == "cached"'
-        - 'metric.name == "system.memory.utilization" and attributes["state"] == "buffered"'
-        - 'metric.name == "system.memory.utilization" and attributes["state"] == "slab_reclaimable"'
   filter/exclude_memory_usage:
     metrics:
       datapoint:
         - 'metric.name == "system.memory.usage" and attributes["state"] == "slab_unreclaimable"'
-        - 'metric.name == "system.memory.usage" and attributes["state"] == "inactive"'
   filter/exclude_filesystem_utilization:
     metrics:
       datapoint:
@@ -218,12 +244,10 @@ processors:
     metrics:
       datapoint:
         - 'metric.name == "system.filesystem.usage" and attributes["type"] == "squashfs"'
-        - 'metric.name == "system.filesystem.usage" and attributes["state"] == "reserved"'
   filter/exclude_filesystem_inodes_usage:
     metrics:
       datapoint:
         - 'metric.name == "system.filesystem.inodes.usage" and attributes["type"] == "squashfs"'
-        - 'metric.name == "system.filesystem.inodes.usage" and attributes["state"] == "reserved"'
   filter/exclude_system_disk:
     metrics:
       datapoint:
@@ -309,15 +333,12 @@ exporters:
       api-key: ${env:NEW_RELIC_LICENSE_KEY}
 
 service:
-  telemetry:
-    logs:
-      level: debug
   pipelines:
     metrics/host:
       receivers: [hostmetrics]
       processors:
         - memory_limiter
-        - adaptivetelemetryprocessor
+        - adaptivetelemetryprocessor        # Main processor with dynamic thresholds
         - metricstransform
         - filter/exclude_cpu_utilization
         - filter/exclude_memory_utilization
@@ -337,19 +358,17 @@ service:
       exporters: [otlphttp]
     logs/host:
       receivers: [filelog]
-      processors: [transform, resourcedetection, resourcedetection/cloud, resourcedetection/env, batch]
+      processors: [memory_limiter, transform, resourcedetection, resourcedetection/cloud, resourcedetection/env, batch]
       exporters: [otlphttp]
     traces:
       receivers: [otlp]
-      processors: [transform, resourcedetection, resourcedetection/cloud, resourcedetection/env, batch]
+      processors: [memory_limiter, transform, resourcedetection, resourcedetection/cloud, resourcedetection/env, batch]
       exporters: [otlphttp]
     metrics:
       receivers: [otlp]
-      processors: [transform, resourcedetection, resourcedetection/cloud, resourcedetection/env, batch]
+      processors: [memory_limiter, transform, resourcedetection, resourcedetection/cloud, resourcedetection/env, batch]
       exporters: [otlphttp]
     logs:
       receivers: [otlp]
-      processors: [transform, resourcedetection, resourcedetection/cloud, resourcedetection/env, batch]
+      processors: [memory_limiter, transform, resourcedetection, resourcedetection/cloud, resourcedetection/env, batch]
       exporters: [otlphttp]
-
-  extensions: [health_check]
